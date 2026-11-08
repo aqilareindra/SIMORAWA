@@ -1,0 +1,22 @@
+:root {
+  --color-primary-dark: #112D4E;
+  --color-primary-accent: #3F72AF;
+  --color-border-light: #DBE2EF;
+  --color-bg-offwhite: #F9F7F7;
+  --font-family-base: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--color-bg-offwhite);
+  color: var(--color-primary-dark);
+  font-family: var(--font-family-base);
+}

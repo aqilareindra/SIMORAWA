@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  BPH
+  KADIV
+  PIC
+  BENDAHARA
+  SEKRETARIS
+}
+
+enum WorkProgramStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+}
+
+enum BudgetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum KasTransactionType {
+  PEMASUKAN
+  PENGELUARAN
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workPrograms    WorkProgram[]    @relation("PicWorkPrograms")
+  documents       Document[]
+  progressReports ProgressReport[]
+  budgets         Budget[]
+  kasTransactions KasTransaction[]
+  evaluations     Evaluation[]
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model WorkProgram {
+  id          String            @id @default(uuid())
+  name        String
+  description String            @db.Text
+  status      WorkProgramStatus @default(NOT_STARTED)
+  picId       String            @map("pic_id")
+  deadline    DateTime
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  pic             User             @relation("PicWorkPrograms", fields: [picId], references: [id])
+  documents       Document[]
+  progressReports ProgressReport[]
+  budgets         Budget[]
+  evaluations     Evaluation[]
+
+  @@map("work_programs")
+}
+
+model Document {
+  id            String   @id @default(uuid())
+  workProgramId String?  @map("work_program_id")
+  uploadedBy    String   @map("uploaded_by")
+  type          String   @db.VarChar(100)
+  mimeType      String   @default("application/pdf") @map("mime_type") @db.VarChar(100)
+  fileName      String   @map("file_name")
+  filePath      String   @map("file_path")
+  fileSize      Int      @map("file_size")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  workProgram WorkProgram? @relation(fields: [workProgramId], references: [id], onDelete: Cascade)
+  uploader    User         @relation(fields: [uploadedBy], references: [id])
+
+  @@map("documents")
+}
+
+model ProgressReport {
+  id            String   @id @default(uuid())
+  workProgramId String   @map("work_program_id")
+  submittedBy   String   @map("submitted_by")
+  progressPct   Int      @map("progress_pct")
+  description   String   @db.Text
+  obstacles     String?  @db.Text
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  workProgram WorkProgram @relation(fields: [workProgramId], references: [id], onDelete: Cascade)
+  submitter   User        @relation(fields: [submittedBy], references: [id])
+
+  @@map("progress_reports")
+}
+
+model Budget {
+  id            String       @id @default(uuid())
+  workProgramId String       @map("work_program_id")
+  submittedBy   String       @map("submitted_by")
+  status        BudgetStatus @default(DRAFT)
+  totalAmount   Decimal      @map("total_amount") @db.Decimal(15, 2)
+  notes         String?      @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  workProgram     WorkProgram      @relation(fields: [workProgramId], references: [id], onDelete: Cascade)
+  submitter       User             @relation(fields: [submittedBy], references: [id])
+  items           BudgetItem[]
+  kasTransactions KasTransaction[]
+
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id         String  @id @default(uuid())
+  budgetId   String  @map("budget_id")
+  itemName   String  @map("item_name")
+  quantity   Int
+  unit       String  @db.VarChar(50)
+  unitPrice  Decimal @map("unit_price") @db.Decimal(15, 2)
+  totalPrice Decimal @map("total_price") @db.Decimal(15, 2)
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@map("budget_items")
+}
+
+model Kas {
+  id           String           @id @default(uuid())
+  balance      Decimal          @db.Decimal(15, 2)
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  transactions KasTransaction[]
+
+  @@map("kas")
+}
+
+model KasTransaction {
+  id              String             @id @default(uuid())
+  kasId           String             @map("kas_id")
+  budgetId        String?            @map("budget_id")
+  type            KasTransactionType
+  amount          Decimal            @db.Decimal(15, 2)
+  description     String             @db.Text
+  transactionDate DateTime           @default(now()) @map("transaction_date")
+  createdBy       String             @map("created_by")
+
+  kas     Kas     @relation(fields: [kasId], references: [id])
+  budget  Budget? @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  creator User    @relation(fields: [createdBy], references: [id])
+
+  @@map("kas_transactions")
+}
+
+model Evaluation {
+  id            String           @id @default(uuid())
+  workProgramId String           @map("work_program_id")
+  evaluatedBy   String           @map("evaluated_by")
+  kesimpulan    String?          @db.Text
+  rekomendasi   String?          @db.Text
+  status        EvaluationStatus @default(DRAFT)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  workProgram WorkProgram           @relation(fields: [workProgramId], references: [id], onDelete: Cascade)
+  evaluator   User                  @relation(fields: [evaluatedBy], references: [id])
+  indicators  EvaluationIndicator[]
+
+  @@map("evaluations")
+}
+
+model EvaluationIndicator {
+  id            String  @id @default(uuid())
+  evaluationId  String  @map("evaluation_id")
+  indicatorName String  @map("indicator_name")
+  target        String
+  realisasi     String
+  score         Int
+  notes         String? @db.Text
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@map("evaluation_indicators")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String   @db.VarChar(100)
+  title     String
+  message   String   @db.Text
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
