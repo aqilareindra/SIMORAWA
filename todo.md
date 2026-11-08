@@ -10,7 +10,7 @@
 - [x] **1.3 Backend Auth & Users (FR-01, FR-02, FR-03):**
   - Endpoint Login JWT, pengecekan `isActive`, dan `@Roles()` guard.
   - CRUD Users khusus role `ADMIN` (validasi password min 12 karakter).
-- [ ] **1.4 Frontend Layout & Auth:**
+- [x] **1.4 Frontend Layout & Auth:**
   - Halaman Login Split-Screen (Gradien `#112D4E` ke `#3F72AF`).
   - Main Layout (Sidebar `#112D4E`, Topbar `#F9F7F7`, filter menu sidebar sesuai Role).
   - Halaman Kelola Pengguna untuk `ADMIN`.
