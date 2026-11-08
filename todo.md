@@ -3,11 +3,11 @@
 > **Aturan Pengerjaan:** Jangan menandai pekerjaan (`[x]`) sebagai selesai jika belum benar-benar diimplementasikan dan diuji.
 
 ## Fase 1: Fondasi, Auth, RBAC & Modul Inti
-- [ ] **1.1 Setup Monorepo & Database:** Inisialisasi `/backend` (NestJS + Prisma) dan `/frontend` (Vue 3 Vite + Ant Design Vue + Pinia + Vue Router). Jalankan `npx prisma validate` terlebih dahulu, dan hanya jalankan `npx prisma migrate dev` setelah konfigurasi `.env` diverifikasi dan disetujui user.
-- [ ] **1.2 Database Seeder (`backend/prisma/seed.ts`):**
+- [x] **1.1 Setup Monorepo & Database:** Inisialisasi `/backend` (NestJS + Prisma) dan `/frontend` (Vue 3 Vite + Ant Design Vue + Pinia + Vue Router). Jalankan `npx prisma validate` terlebih dahulu, dan hanya jalankan `npx prisma migrate dev` setelah konfigurasi `.env` diverifikasi dan disetujui user.
+- [x] **1.2 Database Seeder (`backend/prisma/seed.ts`):**
   - Buat 6 akun dummy (`admin@uisi.ac.id`, `bph@uisi.ac.id`, `kadiv@uisi.ac.id`, `pic@uisi.ac.id`, `bendahara@uisi.ac.id`, `sekretaris@uisi.ac.id`) dengan password `Simorawa2026!` (hash bcrypt, >=12 karakter).
   - Buat 1 record awal di tabel `kas` dengan `balance: 15000000` (Rp 15.000.000).
-- [ ] **1.3 Backend Auth & Users (FR-01, FR-02, FR-03):**
+- [x] **1.3 Backend Auth & Users (FR-01, FR-02, FR-03):**
   - Endpoint Login JWT, pengecekan `isActive`, dan `@Roles()` guard.
   - CRUD Users khusus role `ADMIN` (validasi password min 12 karakter).
 - [ ] **1.4 Frontend Layout & Auth:**
