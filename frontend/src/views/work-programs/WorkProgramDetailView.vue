@@ -15,6 +15,8 @@ import {
   PlusOutlined,
   UploadOutlined,
   DownloadOutlined,
+  StarOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -22,8 +24,11 @@ import { ROLE_LABELS, type User } from '@/types/auth';
 import {
   BUDGET_STATUS_COLORS,
   BUDGET_STATUS_LABELS,
+  EVALUATION_STATUS_COLORS,
+  EVALUATION_STATUS_LABELS,
   WORK_PROGRAM_STATUS_COLORS,
   WORK_PROGRAM_STATUS_LABELS,
+  calculateAverageScore,
   type DocumentItem,
   type ProgressReportItem,
   type WorkProgram,
@@ -40,7 +45,12 @@ const picCandidates = ref<User[]>([]);
 const templateKak = ref<DocumentItem | null>(null);
 const loading = ref(false);
 const updatingStatus = ref(false);
-const activeTab = ref('budgets');
+const VALID_TABS = ['budgets', 'progress', 'documents', 'evaluations'];
+const activeTab = ref(
+  VALID_TABS.includes(route.query.tab as string)
+    ? (route.query.tab as string)
+    : 'budgets',
+);
 
 const canManageWorkProgram = computed(() =>
   ['KADIV', 'ADMIN'].includes(authStore.userRole || ''),
@@ -57,6 +67,54 @@ const canSubmitProgress = computed(() =>
 const canManageDocuments = computed(() =>
   ['PIC', 'SEKRETARIS', 'KADIV', 'ADMIN'].includes(authStore.userRole || ''),
 );
+
+// Evaluasi KPI/KPA (FR-09 s/d FR-12)
+const canManageEvaluation = computed(() =>
+  ['KADIV', 'BPH', 'ADMIN'].includes(authStore.userRole || ''),
+);
+
+const canViewEvaluationDashboard = computed(() =>
+  ['ADMIN', 'BPH', 'KADIV', 'SEKRETARIS'].includes(authStore.userRole || ''),
+);
+
+const evaluationOverview = computed(() => {
+  const evaluations = workProgram.value?.evaluations || [];
+  const submitted = evaluations.filter((e) => e.status === 'SUBMITTED');
+  const pool = submitted.length > 0 ? submitted : evaluations;
+  const average = calculateAverageScore(pool.flatMap((e) => e.indicators || []));
+  return {
+    total: evaluations.length,
+    submitted: submitted.length,
+    draft: evaluations.length - submitted.length,
+    average,
+  };
+});
+
+const evaluationIndicatorColumns = [
+  { title: 'No', key: 'index', width: 55, align: 'center' as const },
+  { title: 'Indikator KPI/KPA', dataIndex: 'indicatorName', key: 'name' },
+  { title: 'Target', dataIndex: 'target', key: 'target', width: 150 },
+  {
+    title: 'Realisasi',
+    dataIndex: 'realisasi',
+    key: 'realisasi',
+    width: 150,
+  },
+  { title: 'Skor', key: 'score', width: 150, align: 'center' as const },
+  { title: 'Catatan', dataIndex: 'notes', key: 'notes' },
+];
+
+function toHalfStar(score: number) {
+  return Math.round(Number(score || 0) * 2) / 2;
+}
+
+function goToCreateEvaluation() {
+  if (!workProgram.value) return;
+  router.push({
+    path: '/evaluations',
+    query: { create: '1', workProgramId: workProgram.value.id },
+  });
+}
 
 const latestProgressPct = computed(() => {
   const reports = workProgram.value?.progressReports;
@@ -915,6 +973,158 @@ onMounted(() => {
                 </template>
               </a-table>
             </a-tab-pane>
+
+            <!-- Tab 4: Evaluasi KPI/KPA (FR-09 s/d FR-12) -->
+            <a-tab-pane key="evaluations">
+              <template #tab>
+                <span>
+                  <StarOutlined />
+                  Evaluasi KPI/KPA ({{ workProgram.evaluations?.length || 0 }})
+                </span>
+              </template>
+
+              <div class="tab-action-banner">
+                <div class="evaluation-overview">
+                  <div class="progress-overview-label">
+                    Rata-rata Skor KPI/KPA Proker:
+                    <strong>{{ evaluationOverview.average.toFixed(2) }} / 5</strong>
+                  </div>
+                  <div class="evaluation-overview-row">
+                    <a-rate
+                      :value="toHalfStar(evaluationOverview.average)"
+                      :count="5"
+                      allow-half
+                      disabled
+                    />
+                    <span class="text-muted">
+                      {{ evaluationOverview.total }} evaluasi ·
+                      {{ evaluationOverview.submitted }} submitted ·
+                      {{ evaluationOverview.draft }} draft
+                    </span>
+                  </div>
+                </div>
+
+                <a-space wrap>
+                  <a-button
+                    v-if="canViewEvaluationDashboard"
+                    :icon="h(BarChartOutlined)"
+                    @click="router.push('/evaluations')"
+                  >
+                    Dashboard Evaluasi
+                  </a-button>
+                  <a-button
+                    v-if="canManageEvaluation"
+                    type="primary"
+                    :icon="h(PlusOutlined)"
+                    @click="goToCreateEvaluation"
+                  >
+                    Buat Evaluasi KPI/KPA
+                  </a-button>
+                </a-space>
+              </div>
+
+              <div
+                v-if="
+                  workProgram.evaluations && workProgram.evaluations.length > 0
+                "
+                class="budgets-list"
+              >
+                <div
+                  v-for="evaluation in workProgram.evaluations"
+                  :key="evaluation.id"
+                  class="budget-block"
+                >
+                  <div class="budget-block-header">
+                    <div>
+                      <span class="fw-semibold">
+                        Evaluasi KPI/KPA ·
+                        {{ evaluation.indicators?.length || 0 }} indikator
+                      </span>
+                      <div class="budget-meta">
+                        Dibuat pada {{ formatDate(evaluation.createdAt) }}
+                        <template v-if="evaluation.evaluator">
+                          oleh
+                          <strong>{{ evaluation.evaluator.name }}</strong>
+                          ({{ ROLE_LABELS[evaluation.evaluator.role] }})
+                        </template>
+                      </div>
+                    </div>
+
+                    <div class="budget-header-right">
+                      <a-tag :color="EVALUATION_STATUS_COLORS[evaluation.status]">
+                        {{ EVALUATION_STATUS_LABELS[evaluation.status] }}
+                      </a-tag>
+                      <a-rate
+                        :value="
+                          toHalfStar(calculateAverageScore(evaluation.indicators))
+                        "
+                        :count="5"
+                        allow-half
+                        disabled
+                        class="small-rate"
+                      />
+                      <span class="budget-total-amount">
+                        {{
+                          calculateAverageScore(evaluation.indicators).toFixed(2)
+                        }}
+                        / 5
+                      </span>
+                    </div>
+                  </div>
+
+                  <a-table
+                    :columns="evaluationIndicatorColumns"
+                    :data-source="evaluation.indicators || []"
+                    row-key="id"
+                    :pagination="false"
+                    size="small"
+                    bordered
+                  >
+                    <template #bodyCell="{ column, record, index }">
+                      <template v-if="column.key === 'index'">
+                        {{ index + 1 }}
+                      </template>
+                      <template v-else-if="column.key === 'score'">
+                        <a-rate
+                          :value="record.score"
+                          :count="5"
+                          disabled
+                          class="small-rate"
+                        />
+                      </template>
+                      <template v-else-if="column.key === 'notes'">
+                        <span v-if="record.notes">{{ record.notes }}</span>
+                        <span v-else class="text-muted">-</span>
+                      </template>
+                    </template>
+                  </a-table>
+
+                  <a-row :gutter="16" style="margin-top: 12px">
+                    <a-col :xs="24" :md="12">
+                      <div class="evaluation-note-box">
+                        <div class="fw-semibold">Kesimpulan</div>
+                        <div class="evaluation-note-text">
+                          {{ evaluation.kesimpulan || 'Belum diisi.' }}
+                        </div>
+                      </div>
+                    </a-col>
+                    <a-col :xs="24" :md="12">
+                      <div class="evaluation-note-box">
+                        <div class="fw-semibold">Rekomendasi</div>
+                        <div class="evaluation-note-text">
+                          {{ evaluation.rekomendasi || 'Belum diisi.' }}
+                        </div>
+                      </div>
+                    </a-col>
+                  </a-row>
+                </div>
+              </div>
+
+              <a-empty
+                v-else
+                description="Belum ada evaluasi KPI/KPA untuk program kerja ini."
+              />
+            </a-tab-pane>
           </a-tabs>
         </a-card>
       </template>
@@ -1287,6 +1497,37 @@ onMounted(() => {
 .fw-semibold {
   font-weight: 600;
   color: #112d4e;
+}
+
+.evaluation-overview {
+  flex: 1;
+  min-width: 240px;
+}
+
+.evaluation-overview-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.small-rate {
+  font-size: 14px;
+}
+
+.evaluation-note-box {
+  border: 1px solid #dbe2ef;
+  border-radius: 8px;
+  padding: 10px 14px;
+  height: 100%;
+  background-color: #f9f7f7;
+}
+
+.evaluation-note-text {
+  margin-top: 4px;
+  color: #2d3748;
+  white-space: pre-line;
+  line-height: 1.6;
 }
 
 .text-muted {

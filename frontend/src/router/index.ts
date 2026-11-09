@@ -11,7 +11,7 @@ import LoginView from '@/views/LoginView.vue';
 import DashboardView from '@/views/DashboardView.vue';
 import WorkProgramListView from '@/views/work-programs/WorkProgramListView.vue';
 import WorkProgramDetailView from '@/views/work-programs/WorkProgramDetailView.vue';
-import EvaluationsView from '@/views/evaluations/EvaluationsView.vue';
+import EvaluationListView from '@/views/evaluations/EvaluationListView.vue';
 import FinanceView from '@/views/finance/FinanceView.vue';
 import UserManagementView from '@/views/users/UserManagementView.vue';
 
@@ -87,7 +87,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'evaluations',
         name: 'Evaluations',
-        component: EvaluationsView,
+        component: EvaluationListView,
         meta: {
           requiresAuth: true,
           title: 'Evaluasi Proker',

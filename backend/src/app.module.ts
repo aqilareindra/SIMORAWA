@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { WorkProgramsModule } from './work-programs/work-programs.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ProgressReportsModule } from './progress-reports/progress-reports.module';
+import { EvaluationsModule } from './evaluations/evaluations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ProgressReportsModule } from './progress-reports/progress-reports.modul
     WorkProgramsModule,
     DocumentsModule,
     ProgressReportsModule,
+    EvaluationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

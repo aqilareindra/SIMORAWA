@@ -93,17 +93,56 @@ export interface EvaluationIndicatorItem {
   notes?: string | null;
 }
 
+export type EvaluationStatus = 'DRAFT' | 'SUBMITTED';
+
+export const EVALUATION_STATUS_LABELS: Record<EvaluationStatus, string> = {
+  DRAFT: 'Draft',
+  SUBMITTED: 'Submitted',
+};
+
+export const EVALUATION_STATUS_COLORS: Record<EvaluationStatus, string> = {
+  DRAFT: 'default',
+  SUBMITTED: 'success',
+};
+
+export interface EvaluationWorkProgramRef {
+  id: string;
+  name: string;
+  status: WorkProgramStatus;
+  deadline: string;
+  pic?: User;
+}
+
 export interface EvaluationItem {
   id: string;
   workProgramId: string;
   evaluatedBy: string;
   kesimpulan?: string | null;
   rekomendasi?: string | null;
-  status: 'DRAFT' | 'SUBMITTED';
+  status: EvaluationStatus;
   createdAt: string;
   updatedAt: string;
   evaluator?: User;
   indicators?: EvaluationIndicatorItem[];
+  workProgram?: EvaluationWorkProgramRef;
+  /** Dihitung oleh backend pada endpoint /evaluations */
+  avgScore?: number;
+}
+
+export interface EvaluationSummary {
+  totalEvaluations: number;
+  submittedCount: number;
+  draftCount: number;
+  averageScore: number;
+}
+
+/** Hitung rata-rata skor indikator (1-5) dengan presisi 2 desimal */
+export function calculateAverageScore(
+  indicators?: Array<{ score: number }>,
+): number {
+  if (!indicators || indicators.length === 0) return 0;
+  const sum = indicators.reduce((acc, ind) => acc + Number(ind.score || 0), 0);
+  return Number((sum / indicators.length).toFixed(2));
 }
 
 export interface WorkProgram {

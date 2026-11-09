@@ -25,7 +25,7 @@
   - Upload dokumen pendukung PDF (KAK, LPJ, Surat) pada detail proker oleh `PIC` & `SEKRETARIS` (Multer max 10MB, simpan kategori di `type` dan MIME di `mimeType` - UAT-22 Fix).
 - [x] **2.2 Laporan Progres PIC (FR-22):**
   - Form tambah progres (0-100%, deskripsi, kendala) oleh `PIC` di halaman Detail Proker.
-- [ ] **2.3 Evaluasi KPI/KPA & Dashboard Evaluasi (FR-09, FR-10, FR-11, FR-12):**
+- [x] **2.3 Evaluasi KPI/KPA & Dashboard Evaluasi (FR-09, FR-10, FR-11, FR-12):**
   - Form Evaluasi dinamis (tambah/hapus baris indikator, skor bintang 1-5, simpan sebagai `DRAFT` atau `SUBMITTED`) oleh `KADIV`.
   - Dashboard Evaluasi Terpusat untuk `BPH` & `KADIV` (Kartu statistik: Total Evaluasi, Submitted, Draft, Rata-rata Skor).
 
