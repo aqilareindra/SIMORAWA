@@ -30,7 +30,7 @@
   - Dashboard Evaluasi Terpusat untuk `BPH` & `KADIV` (Kartu statistik: Total Evaluasi, Submitted, Draft, Rata-rata Skor).
 
 ## Fase 3: Keuangan, Pemotongan Kas Otomatis, Notifikasi & Export
-- [ ] **3.1 Pengajuan & Approval Anggaran + Potong Kas Otomatis (FR-17, FR-18, FR-19):**
+- [x] **3.1 Pengajuan & Approval Anggaran + Potong Kas Otomatis (FR-17, FR-18, FR-19):**
   - Form pengajuan anggaran + dynamic `budget_items` (auto-calculate total) oleh `KADIV`/`BENDAHARA`.
   - Tombol Approve/Reject untuk `BPH`/`ADMIN`.
   - **Transaksi Otomatis:** Saat `APPROVED`, otomatis kurangi `kas.balance` dan catat di `kas_transactions` (`PENGELUARAN`).

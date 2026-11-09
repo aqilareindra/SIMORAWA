@@ -10,6 +10,8 @@ import { WorkProgramsModule } from './work-programs/work-programs.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ProgressReportsModule } from './progress-reports/progress-reports.module';
 import { EvaluationsModule } from './evaluations/evaluations.module';
+import { BudgetsModule } from './budgets/budgets.module';
+import { KasModule } from './kas/kas.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { EvaluationsModule } from './evaluations/evaluations.module';
     DocumentsModule,
     ProgressReportsModule,
     EvaluationsModule,
+    BudgetsModule,
+    KasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

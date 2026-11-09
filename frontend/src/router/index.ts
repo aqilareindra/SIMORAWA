@@ -101,7 +101,14 @@ const routes: RouteRecordRaw[] = [
         meta: {
           requiresAuth: true,
           title: 'Anggaran & Kas',
-          roles: ['ADMIN', 'BPH', 'KADIV', 'BENDAHARA', 'SEKRETARIS'] as Role[],
+          roles: [
+            'ADMIN',
+            'BPH',
+            'KADIV',
+            'PIC',
+            'BENDAHARA',
+            'SEKRETARIS',
+          ] as Role[],
         },
       },
       {

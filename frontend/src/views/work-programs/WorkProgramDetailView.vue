@@ -17,6 +17,7 @@ import {
   DownloadOutlined,
   StarOutlined,
   BarChartOutlined,
+  SendOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -29,11 +30,13 @@ import {
   WORK_PROGRAM_STATUS_COLORS,
   WORK_PROGRAM_STATUS_LABELS,
   calculateAverageScore,
+  type Budget,
   type DocumentItem,
   type ProgressReportItem,
   type WorkProgram,
   type WorkProgramStatus,
 } from '@/types/work-program';
+import BudgetFormModal from '@/components/finance/BudgetFormModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -67,6 +70,62 @@ const canSubmitProgress = computed(() =>
 const canManageDocuments = computed(() =>
   ['PIC', 'SEKRETARIS', 'KADIV', 'ADMIN'].includes(authStore.userRole || ''),
 );
+
+// Manajemen Anggaran Proker (FR-17 & FR-18)
+const canManageBudgetForProker = computed(() => {
+  const role = authStore.userRole;
+  if (!role) return false;
+  if (['KADIV', 'BENDAHARA', 'ADMIN'].includes(role)) return true;
+  if (role === 'PIC') {
+    return workProgram.value?.picId === authStore.user?.id;
+  }
+  return false;
+});
+
+const canReviewBudget = computed(() =>
+  ['BENDAHARA', 'BPH', 'ADMIN'].includes(authStore.userRole || ''),
+);
+
+const budgetModalVisible = ref(false);
+const editingBudget = ref<Budget | null>(null);
+const submittingBudgetId = ref<string | null>(null);
+
+function openCreateBudgetModal() {
+  editingBudget.value = null;
+  budgetModalVisible.value = true;
+}
+
+function openEditBudgetModal(budget: Budget) {
+  editingBudget.value = budget;
+  budgetModalVisible.value = true;
+}
+
+async function handleSubmitBudgetForApproval(budget: Budget) {
+  submittingBudgetId.value = budget.id;
+  try {
+    await api.patch(`/budgets/${budget.id}/submit`);
+    message.success(
+      'Anggaran berhasil diajukan dan berstatus Menunggu Approval (PENDING).',
+    );
+    await fetchDetail();
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || 'Gagal mengajukan anggaran.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  } finally {
+    submittingBudgetId.value = null;
+  }
+}
+
+async function handleDeleteBudget(budget: Budget) {
+  try {
+    await api.delete(`/budgets/${budget.id}`);
+    message.success('Rincian anggaran berhasil dihapus.');
+    await fetchDetail();
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || 'Gagal menghapus anggaran.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  }
+}
 
 // Evaluasi KPI/KPA (FR-09 s/d FR-12)
 const canManageEvaluation = computed(() =>
@@ -721,6 +780,36 @@ onMounted(() => {
                 </span>
               </template>
 
+              <div class="tab-action-banner">
+                <div>
+                  <div class="fw-semibold">
+                    Pengajuan &amp; Rincian Anggaran Program Kerja
+                  </div>
+                  <div class="text-muted">
+                    Kelola rincian item anggaran kegiatan dan ajukan untuk
+                    disetujui BPH / Bendahara (otomatis memotong Kas HIMA saat
+                    APPROVED).
+                  </div>
+                </div>
+
+                <a-space wrap>
+                  <a-button
+                    :icon="h(WalletOutlined)"
+                    @click="router.push('/finance')"
+                  >
+                    Halaman Anggaran &amp; Kas
+                  </a-button>
+                  <a-button
+                    v-if="canManageBudgetForProker"
+                    type="primary"
+                    :icon="h(PlusOutlined)"
+                    @click="openCreateBudgetModal"
+                  >
+                    Tambah Pengajuan Anggaran
+                  </a-button>
+                </a-space>
+              </div>
+
               <div
                 v-if="workProgram.budgets && workProgram.budgets.length > 0"
                 class="budgets-list"
@@ -732,7 +821,7 @@ onMounted(() => {
                 >
                   <div class="budget-block-header">
                     <div>
-                      <span class="fw-semibold">
+                      <span class="fw-semibold budget-notes-pre">
                         {{ budget.notes || 'Rincian Anggaran Program Kerja' }}
                       </span>
                       <div class="budget-meta">
@@ -745,11 +834,70 @@ onMounted(() => {
 
                     <div class="budget-header-right">
                       <a-tag :color="BUDGET_STATUS_COLORS[budget.status]">
-                        {{ BUDGET_STATUS_LABELS[budget.status] }}
+                        {{
+                          budget.status === 'SUBMITTED'
+                            ? 'Menunggu Approval (PENDING)'
+                            : BUDGET_STATUS_LABELS[budget.status]
+                        }}
                       </a-tag>
                       <span class="budget-total-amount">
                         Total: {{ formatCurrency(budget.totalAmount) }}
                       </span>
+
+                      <a-space
+                        v-if="
+                          canManageBudgetForProker &&
+                          ['DRAFT', 'REJECTED'].includes(budget.status)
+                        "
+                        :size="4"
+                      >
+                        <a-button
+                          size="small"
+                          :icon="h(EditOutlined)"
+                          @click="openEditBudgetModal(budget)"
+                        >
+                          Edit
+                        </a-button>
+                        <a-popconfirm
+                          title="Ajukan rincian anggaran ini untuk direview Bendahara/BPH?"
+                          ok-text="Ya, Ajukan"
+                          cancel-text="Batal"
+                          @confirm="handleSubmitBudgetForApproval(budget)"
+                        >
+                          <a-button
+                            type="primary"
+                            size="small"
+                            :loading="submittingBudgetId === budget.id"
+                            :icon="h(SendOutlined)"
+                          >
+                            Ajukan Approval
+                          </a-button>
+                        </a-popconfirm>
+                        <a-popconfirm
+                          title="Hapus rincian anggaran ini?"
+                          ok-text="Ya, Hapus"
+                          cancel-text="Batal"
+                          :ok-button-props="{ danger: true }"
+                          @confirm="handleDeleteBudget(budget)"
+                        >
+                          <a-button
+                            danger
+                            size="small"
+                            :icon="h(DeleteOutlined)"
+                          />
+                        </a-popconfirm>
+                      </a-space>
+
+                      <a-button
+                        v-else-if="
+                          canReviewBudget && budget.status === 'SUBMITTED'
+                        "
+                        type="primary"
+                        size="small"
+                        @click="router.push('/finance')"
+                      >
+                        Review &amp; Setujui di Keuangan
+                      </a-button>
                     </div>
                   </div>
 
@@ -1299,6 +1447,16 @@ onMounted(() => {
         </a-row>
       </a-form>
     </a-modal>
+
+    <!-- Modal Buat / Edit Rincian Anggaran Proker -->
+    <BudgetFormModal
+      v-if="workProgram"
+      v-model:open="budgetModalVisible"
+      :budget="editingBudget"
+      :fixed-work-program-id="workProgram.id"
+      :fixed-work-program-name="workProgram.name"
+      @saved="fetchDetail"
+    />
   </div>
 </template>
 

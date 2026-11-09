@@ -24,17 +24,56 @@ export const WORK_PROGRAM_STATUS_COLORS: Record<WorkProgramStatus, string> = {
 
 export const BUDGET_STATUS_LABELS: Record<BudgetStatus, string> = {
   DRAFT: 'Draft',
-  SUBMITTED: 'Diajukan',
+  SUBMITTED: 'Menunggu Approval',
   APPROVED: 'Disetujui',
   REJECTED: 'Ditolak',
 };
 
 export const BUDGET_STATUS_COLORS: Record<BudgetStatus, string> = {
   DRAFT: 'default',
-  SUBMITTED: 'processing',
+  SUBMITTED: 'gold',
   APPROVED: 'success',
   REJECTED: 'error',
 };
+
+export type KasTransactionType = 'PEMASUKAN' | 'PENGELUARAN';
+
+export const KAS_TRANSACTION_LABELS: Record<KasTransactionType, string> = {
+  PEMASUKAN: 'Pemasukan',
+  PENGELUARAN: 'Pengeluaran',
+};
+
+export const KAS_TRANSACTION_COLORS: Record<KasTransactionType, string> = {
+  PEMASUKAN: 'green',
+  PENGELUARAN: 'red',
+};
+
+export interface KasTransactionItem {
+  id: string;
+  kasId: string;
+  budgetId?: string | null;
+  type: KasTransactionType;
+  amount: number | string;
+  description: string;
+  transactionDate: string;
+  createdBy: string;
+  creator?: Pick<User, 'id' | 'name' | 'email' | 'role'>;
+  budget?: {
+    id: string;
+    status: BudgetStatus;
+    totalAmount: number | string;
+    workProgram?: { id: string; name: string };
+  } | null;
+}
+
+export interface KasOverview {
+  id: string;
+  balance: number | string;
+  updatedAt: string;
+  totalIncome: number | string;
+  totalExpense: number | string;
+  transactions: KasTransactionItem[];
+}
 
 export interface BudgetItem {
   id?: string;
@@ -57,6 +96,16 @@ export interface Budget {
   updatedAt: string;
   items: BudgetItem[];
   submitter?: User;
+  workProgram?: {
+    id: string;
+    name: string;
+    status: WorkProgramStatus;
+    deadline: string;
+    picId: string;
+    pic?: Pick<User, 'id' | 'name' | 'email' | 'role'>;
+  };
+  /** Transaksi kas pencairan (creator = approver) */
+  kasTransactions?: KasTransactionItem[];
 }
 
 export interface ProgressReportItem {
