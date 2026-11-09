@@ -14,7 +14,7 @@
   - Halaman Login Split-Screen (Gradien `#112D4E` ke `#3F72AF`).
   - Main Layout (Sidebar `#112D4E`, Topbar `#F9F7F7`, filter menu sidebar sesuai Role).
   - Halaman Kelola Pengguna untuk `ADMIN`.
-- [ ] **1.5 CRUD Program Kerja (FR-04, FR-05, FR-06, FR-07):**
+- [x] **1.5 CRUD Program Kerja (FR-04, FR-05, FR-06, FR-07):**
   - Backend & Frontend CRUD `work_programs` + rincian anggaran awal.
   - Fitur ubah status real-time (`NOT_STARTED`, `IN_PROGRESS`, `ON_HOLD`, `COMPLETED`) oleh `KADIV` & `PIC`.
   - Pastikan hapus proker berjalan mulus dengan `ON DELETE CASCADE` (UAT-19 Fix).

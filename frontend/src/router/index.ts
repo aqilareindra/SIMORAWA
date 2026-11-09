@@ -9,7 +9,8 @@ import type { Role } from '@/types/auth';
 import MainLayout from '@/layouts/MainLayout.vue';
 import LoginView from '@/views/LoginView.vue';
 import DashboardView from '@/views/DashboardView.vue';
-import WorkProgramsView from '@/views/work-programs/WorkProgramsView.vue';
+import WorkProgramListView from '@/views/work-programs/WorkProgramListView.vue';
+import WorkProgramDetailView from '@/views/work-programs/WorkProgramDetailView.vue';
 import EvaluationsView from '@/views/evaluations/EvaluationsView.vue';
 import FinanceView from '@/views/finance/FinanceView.vue';
 import UserManagementView from '@/views/users/UserManagementView.vue';
@@ -52,10 +53,27 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'work-programs',
         name: 'WorkPrograms',
-        component: WorkProgramsView,
+        component: WorkProgramListView,
         meta: {
           requiresAuth: true,
           title: 'Program Kerja',
+          roles: [
+            'ADMIN',
+            'BPH',
+            'KADIV',
+            'PIC',
+            'BENDAHARA',
+            'SEKRETARIS',
+          ] as Role[],
+        },
+      },
+      {
+        path: 'work-programs/:id',
+        name: 'WorkProgramDetail',
+        component: WorkProgramDetailView,
+        meta: {
+          requiresAuth: true,
+          title: 'Detail Program Kerja',
           roles: [
             'ADMIN',
             'BPH',
