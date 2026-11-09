@@ -12,6 +12,9 @@ import {
   WalletOutlined,
   LineChartOutlined,
   FilePdfOutlined,
+  PlusOutlined,
+  UploadOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -21,6 +24,8 @@ import {
   BUDGET_STATUS_LABELS,
   WORK_PROGRAM_STATUS_COLORS,
   WORK_PROGRAM_STATUS_LABELS,
+  type DocumentItem,
+  type ProgressReportItem,
   type WorkProgram,
   type WorkProgramStatus,
 } from '@/types/work-program';
@@ -32,6 +37,7 @@ const authStore = useAuthStore();
 const workProgramId = computed(() => route.params.id as string);
 const workProgram = ref<WorkProgram | null>(null);
 const picCandidates = ref<User[]>([]);
+const templateKak = ref<DocumentItem | null>(null);
 const loading = ref(false);
 const updatingStatus = ref(false);
 const activeTab = ref('budgets');
@@ -44,12 +50,36 @@ const canUpdateStatus = computed(() =>
   ['KADIV', 'PIC', 'ADMIN'].includes(authStore.userRole || ''),
 );
 
+const canSubmitProgress = computed(() =>
+  ['PIC', 'KADIV', 'ADMIN'].includes(authStore.userRole || ''),
+);
+
+const canManageDocuments = computed(() =>
+  ['PIC', 'SEKRETARIS', 'KADIV', 'ADMIN'].includes(authStore.userRole || ''),
+);
+
+const latestProgressPct = computed(() => {
+  const reports = workProgram.value?.progressReports;
+  if (reports && reports.length > 0) {
+    return reports[0].progressPct;
+  }
+  return workProgram.value?.status === 'COMPLETED' ? 100 : 0;
+});
+
 const statusOptions = (
   Object.keys(WORK_PROGRAM_STATUS_LABELS) as WorkProgramStatus[]
 ).map((status) => ({
   value: status,
   label: WORK_PROGRAM_STATUS_LABELS[status],
 }));
+
+const documentTypeColors: Record<string, string> = {
+  KAK: 'blue',
+  LPJ: 'green',
+  SURAT: 'purple',
+  TEMPLATE_KAK: 'geekblue',
+  LAINNYA: 'default',
+};
 
 // Modal Edit Proker
 const editModalVisible = ref(false);
@@ -75,6 +105,36 @@ const editFormRules: Record<string, Rule[]> = {
   picId: [{ required: true, message: 'PIC wajib dipilih' }],
   deadline: [{ required: true, message: 'Deadline wajib diisi' }],
 };
+
+// Modal Tambah Laporan Progres (FR-22)
+const progressModalVisible = ref(false);
+const progressSubmitting = ref(false);
+const progressFormRef = ref();
+const progressFormState = reactive<{
+  progressPct: number;
+  description: string;
+  obstacles: string;
+}>({
+  progressPct: 0,
+  description: '',
+  obstacles: '',
+});
+
+const progressFormRules: Record<string, Rule[]> = {
+  progressPct: [
+    { required: true, message: 'Persentase capaian wajib diisi' },
+  ],
+  description: [
+    { required: true, message: 'Deskripsi progres kegiatan wajib diisi' },
+  ],
+};
+
+// Modal Upload Dokumen Pendukung (FR-08 & Mitigasi UAT-22)
+const docModalVisible = ref(false);
+const docSubmitting = ref(false);
+const docCategory = ref<'KAK' | 'LPJ' | 'SURAT' | 'LAINNYA'>('KAK');
+const selectedDocFile = ref<File | null>(null);
+const downloadingDocId = ref<string | null>(null);
 
 const budgetItemColumns = [
   {
@@ -119,16 +179,16 @@ const budgetItemColumns = [
 
 const progressColumns = [
   {
-    title: 'Tanggal Laporan',
+    title: 'Tanggal Submit',
     dataIndex: 'submittedAt',
     key: 'submittedAt',
-    width: 170,
+    width: 165,
   },
   {
     title: 'Capaian (%)',
     dataIndex: 'progressPct',
     key: 'progressPct',
-    width: 150,
+    width: 155,
   },
   {
     title: 'Deskripsi Progres Kegiatan',
@@ -136,20 +196,26 @@ const progressColumns = [
     key: 'description',
   },
   {
-    title: 'Kendala Lapangan',
+    title: 'Kendala di Lapangan',
     dataIndex: 'obstacles',
     key: 'obstacles',
   },
   {
-    title: 'Dilaporkan Oleh',
+    title: 'Pelapor',
     key: 'submitter',
-    width: 180,
+    width: 170,
+  },
+  {
+    title: 'Aksi',
+    key: 'actions',
+    width: 100,
+    align: 'center' as const,
   },
 ];
 
 const documentColumns = [
   {
-    title: 'Nama Berkas',
+    title: 'Nama File',
     dataIndex: 'fileName',
     key: 'fileName',
   },
@@ -160,27 +226,27 @@ const documentColumns = [
     width: 130,
   },
   {
-    title: 'Tipe MIME',
-    dataIndex: 'mimeType',
-    key: 'mimeType',
-    width: 150,
-  },
-  {
     title: 'Ukuran File',
     dataIndex: 'fileSize',
     key: 'fileSize',
     width: 130,
   },
   {
-    title: 'Diunggah Oleh',
+    title: 'Pengunggah',
     key: 'uploader',
-    width: 180,
+    width: 175,
   },
   {
     title: 'Tanggal Unggah',
     dataIndex: 'createdAt',
     key: 'createdAt',
     width: 160,
+  },
+  {
+    title: 'Aksi',
+    key: 'actions',
+    width: 185,
+    align: 'center' as const,
   },
 ];
 
@@ -207,6 +273,17 @@ async function fetchPicCandidates() {
     picCandidates.value = data;
   } catch {
     // Abaikan jika gagal
+  }
+}
+
+async function fetchTemplateKak() {
+  try {
+    const { data } = await api.get<DocumentItem | null>(
+      '/documents/template-kak',
+    );
+    templateKak.value = data || null;
+  } catch {
+    templateKak.value = null;
   }
 }
 
@@ -284,6 +361,153 @@ async function handleDeleteWorkProgram() {
   }
 }
 
+// Fungsi Laporan Progres (FR-22)
+function openProgressModal() {
+  progressFormState.progressPct = latestProgressPct.value;
+  progressFormState.description = '';
+  progressFormState.obstacles = '';
+  progressModalVisible.value = true;
+}
+
+async function handleSubmitProgress() {
+  if (!workProgram.value) return;
+  try {
+    await progressFormRef.value?.validate();
+  } catch {
+    return;
+  }
+
+  progressSubmitting.value = true;
+  try {
+    await api.post(`/work-programs/${workProgram.value.id}/progress`, {
+      progressPct: Number(progressFormState.progressPct),
+      description: progressFormState.description.trim(),
+      obstacles: progressFormState.obstacles.trim() || undefined,
+    });
+    message.success('Laporan progres kegiatan berhasil ditambahkan.');
+    progressModalVisible.value = false;
+    await fetchDetail();
+  } catch (err: any) {
+    const msg =
+      err?.response?.data?.message || 'Gagal menyimpan laporan progres.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  } finally {
+    progressSubmitting.value = false;
+  }
+}
+
+async function handleDeleteProgress(record: ProgressReportItem) {
+  try {
+    await api.delete(`/progress-reports/${record.id}`);
+    message.success('Laporan progres berhasil dihapus.');
+    await fetchDetail();
+  } catch (err: any) {
+    const msg =
+      err?.response?.data?.message || 'Gagal menghapus laporan progres.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  }
+}
+
+// Fungsi Dokumen Kegiatan (FR-08 & FR-21)
+function openUploadDocModal() {
+  docCategory.value = 'KAK';
+  selectedDocFile.value = null;
+  docModalVisible.value = true;
+}
+
+function onDocFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  if (!file) {
+    selectedDocFile.value = null;
+    return;
+  }
+
+  if (
+    file.type !== 'application/pdf' &&
+    !file.name.toLowerCase().endsWith('.pdf')
+  ) {
+    message.error('Hanya file berformat PDF (.pdf) yang diperbolehkan.');
+    input.value = '';
+    selectedDocFile.value = null;
+    return;
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    message.error('Ukuran file maksimal adalah 10 MB.');
+    input.value = '';
+    selectedDocFile.value = null;
+    return;
+  }
+
+  selectedDocFile.value = file;
+}
+
+async function handleUploadDocument() {
+  if (!workProgram.value) return;
+  if (!selectedDocFile.value) {
+    message.warning('Silakan pilih file PDF dokumen terlebih dahulu.');
+    return;
+  }
+
+  docSubmitting.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedDocFile.value);
+    formData.append('workProgramId', workProgram.value.id);
+    formData.append('type', docCategory.value);
+
+    await api.post('/documents/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    message.success('Dokumen PDF berhasil diunggah.');
+    docModalVisible.value = false;
+    await fetchDetail();
+  } catch (err: any) {
+    const msg =
+      err?.response?.data?.message || 'Gagal mengunggah dokumen PDF.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  } finally {
+    docSubmitting.value = false;
+  }
+}
+
+async function handleDownloadDocument(doc: DocumentItem) {
+  downloadingDocId.value = doc.id;
+  try {
+    const response = await api.get(`/documents/${doc.id}/download`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', doc.fileName || 'Dokumen-SIMORAWA.pdf');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch {
+    message.error('Gagal mengunduh file dokumen PDF.');
+  } finally {
+    downloadingDocId.value = null;
+  }
+}
+
+async function handleDeleteDocument(doc: DocumentItem) {
+  try {
+    await api.delete(`/documents/${doc.id}`);
+    message.success(`Dokumen "${doc.fileName}" berhasil dihapus.`);
+    await fetchDetail();
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || 'Gagal menghapus dokumen.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  }
+}
+
 function formatCurrency(val: number | string | undefined) {
   const num = Number(val ?? 0);
   return new Intl.NumberFormat('id-ID', {
@@ -312,6 +536,7 @@ function formatFileSize(bytes?: number) {
 onMounted(() => {
   fetchDetail();
   fetchPicCandidates();
+  fetchTemplateKak();
 });
 </script>
 
@@ -501,7 +726,7 @@ onMounted(() => {
               />
             </a-tab-pane>
 
-            <!-- Tab 2: Laporan Progres PIC -->
+            <!-- Tab 2: Laporan Progres PIC (FR-22) -->
             <a-tab-pane key="progress">
               <template #tab>
                 <span>
@@ -511,6 +736,30 @@ onMounted(() => {
                   }})
                 </span>
               </template>
+
+              <!-- Bar Ringkasan Capaian Terbaru & Tombol Tambah Progres -->
+              <div class="tab-action-banner">
+                <div class="progress-overview-box">
+                  <div class="progress-overview-label">
+                    Capaian Pelaksanaan Saat Ini:
+                    <strong>{{ latestProgressPct }}%</strong>
+                  </div>
+                  <a-progress
+                    :percent="latestProgressPct"
+                    stroke-color="#3F72AF"
+                    style="max-width: 420px; margin-bottom: 0"
+                  />
+                </div>
+
+                <a-button
+                  v-if="canSubmitProgress"
+                  type="primary"
+                  :icon="h(PlusOutlined)"
+                  @click="openProgressModal"
+                >
+                  Tambah Laporan Progres
+                </a-button>
+              </div>
 
               <a-table
                 :columns="progressColumns"
@@ -531,16 +780,39 @@ onMounted(() => {
                     />
                   </template>
                   <template v-else-if="column.key === 'obstacles'">
-                    {{ record.obstacles || 'Tidak ada kendala' }}
+                    <span v-if="record.obstacles">{{ record.obstacles }}</span>
+                    <span v-else class="text-muted">Tidak ada kendala</span>
                   </template>
                   <template v-else-if="column.key === 'submitter'">
-                    {{ record.submitter?.name || '-' }}
+                    <div class="fw-semibold">
+                      {{ record.submitter?.name || '-' }}
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'actions'">
+                    <a-popconfirm
+                      v-if="canSubmitProgress"
+                      title="Hapus item laporan progres ini?"
+                      ok-text="Ya, Hapus"
+                      cancel-text="Batal"
+                      :ok-button-props="{ danger: true }"
+                      @confirm="handleDeleteProgress(record as ProgressReportItem)"
+                    >
+                      <a-button
+                        type="link"
+                        danger
+                        size="small"
+                        :icon="h(DeleteOutlined)"
+                      >
+                        Hapus
+                      </a-button>
+                    </a-popconfirm>
+                    <span v-else>-</span>
                   </template>
                 </template>
               </a-table>
             </a-tab-pane>
 
-            <!-- Tab 3: Dokumen Kegiatan -->
+            <!-- Tab 3: Dokumen Kegiatan (FR-08 & FR-21) -->
             <a-tab-pane key="documents">
               <template #tab>
                 <span>
@@ -548,6 +820,38 @@ onMounted(() => {
                   Dokumen Kegiatan ({{ workProgram.documents?.length || 0 }})
                 </span>
               </template>
+
+              <div class="tab-action-banner">
+                <div>
+                  <div class="fw-semibold">
+                    Arsip Berkas Pendukung Program Kerja (PDF)
+                  </div>
+                  <div class="text-muted">
+                    Unggah dokumen KAK, LPJ, Surat, atau berkas pendukung lainnya
+                    (Format PDF, maks. 10 MB).
+                  </div>
+                </div>
+
+                <a-space wrap>
+                  <a-button
+                    v-if="templateKak"
+                    :loading="downloadingDocId === templateKak.id"
+                    :icon="h(DownloadOutlined)"
+                    @click="handleDownloadDocument(templateKak)"
+                  >
+                    Unduh Template KAK Standar
+                  </a-button>
+
+                  <a-button
+                    v-if="canManageDocuments"
+                    type="primary"
+                    :icon="h(UploadOutlined)"
+                    @click="openUploadDocModal"
+                  >
+                    Unggah Dokumen (PDF)
+                  </a-button>
+                </a-space>
+              </div>
 
               <a-table
                 :columns="documentColumns"
@@ -557,8 +861,16 @@ onMounted(() => {
                 bordered
               >
                 <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'type'">
-                    <a-tag color="blue">{{ record.type }}</a-tag>
+                  <template v-if="column.key === 'fileName'">
+                    <div class="doc-name-cell">
+                      <FilePdfOutlined style="color: #dc2626" />
+                      <span class="fw-semibold">{{ record.fileName }}</span>
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'type'">
+                    <a-tag :color="documentTypeColors[record.type] || 'blue'">
+                      {{ record.type }}
+                    </a-tag>
                   </template>
                   <template v-else-if="column.key === 'fileSize'">
                     {{ formatFileSize(record.fileSize) }}
@@ -569,6 +881,37 @@ onMounted(() => {
                   <template v-else-if="column.key === 'createdAt'">
                     {{ formatDate(record.createdAt) }}
                   </template>
+                  <template v-else-if="column.key === 'actions'">
+                    <a-space :size="4">
+                      <a-button
+                        type="link"
+                        size="small"
+                        :loading="downloadingDocId === record.id"
+                        :icon="h(DownloadOutlined)"
+                        @click="handleDownloadDocument(record as DocumentItem)"
+                      >
+                        Unduh
+                      </a-button>
+
+                      <a-popconfirm
+                        v-if="canManageDocuments"
+                        title="Hapus dokumen PDF ini?"
+                        ok-text="Ya, Hapus"
+                        cancel-text="Batal"
+                        :ok-button-props="{ danger: true }"
+                        @confirm="handleDeleteDocument(record as DocumentItem)"
+                      >
+                        <a-button
+                          type="link"
+                          danger
+                          size="small"
+                          :icon="h(DeleteOutlined)"
+                        >
+                          Hapus
+                        </a-button>
+                      </a-popconfirm>
+                    </a-space>
+                  </template>
                 </template>
               </a-table>
             </a-tab-pane>
@@ -576,6 +919,119 @@ onMounted(() => {
         </a-card>
       </template>
     </a-spin>
+
+    <!-- Modal Tambah Laporan Progres (FR-22) -->
+    <a-modal
+      v-model:open="progressModalVisible"
+      title="Tambah Laporan Progres Kegiatan"
+      :confirm-loading="progressSubmitting"
+      ok-text="Simpan Progres"
+      cancel-text="Batal"
+      destroy-on-close
+      @ok="handleSubmitProgress"
+    >
+      <a-form
+        ref="progressFormRef"
+        layout="vertical"
+        :model="progressFormState"
+        :rules="progressFormRules"
+        style="margin-top: 12px"
+      >
+        <a-form-item
+          label="Persentase Capaian Kegiatan (0% - 100%)"
+          name="progressPct"
+        >
+          <a-row :gutter="16" align="middle">
+            <a-col :span="17">
+              <a-slider
+                v-model:value="progressFormState.progressPct"
+                :min="0"
+                :max="100"
+              />
+            </a-col>
+            <a-col :span="7">
+              <a-input-number
+                v-model:value="progressFormState.progressPct"
+                :min="0"
+                :max="100"
+                addon-after="%"
+                style="width: 100%"
+              />
+            </a-col>
+          </a-row>
+        </a-form-item>
+
+        <a-form-item label="Deskripsi Progres Kegiatan" name="description">
+          <a-textarea
+            v-model:value="progressFormState.description"
+            :rows="4"
+            placeholder="Jelaskan tahapan kegiatan yang sudah terlaksana..."
+          />
+        </a-form-item>
+
+        <a-form-item
+          label="Kendala di Lapangan (Opsional)"
+          name="obstacles"
+        >
+          <a-textarea
+            v-model:value="progressFormState.obstacles"
+            :rows="3"
+            placeholder="Tuliskan kendala atau hambatan teknis jika ada (kosongkan jika lancar)..."
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <!-- Modal Unggah Dokumen Pendukung (FR-08 & Mitigasi UAT-22) -->
+    <a-modal
+      v-model:open="docModalVisible"
+      title="Unggah Dokumen Pendukung (PDF)"
+      :confirm-loading="docSubmitting"
+      ok-text="Unggah Dokumen"
+      cancel-text="Batal"
+      destroy-on-close
+      @ok="handleUploadDocument"
+    >
+      <a-form layout="vertical" style="margin-top: 12px">
+        <a-form-item label="Kategori Dokumen" required>
+          <a-select v-model:value="docCategory">
+            <a-select-option value="KAK">
+              KAK (Kerangka Acuan Kegiatan)
+            </a-select-option>
+            <a-select-option value="LPJ">
+              LPJ (Laporan Pertanggungjawaban)
+            </a-select-option>
+            <a-select-option value="SURAT">
+              SURAT (Surat Menyurat / Perizinan)
+            </a-select-option>
+            <a-select-option value="LAINNYA">
+              LAINNYA (Dokumen Pendukung Lain)
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+
+        <a-form-item
+          label="Pilih File PDF (Maksimal 10 MB)"
+          required
+        >
+          <input
+            type="file"
+            accept=".pdf,application/pdf"
+            class="file-input-control"
+            @change="onDocFileChange"
+          />
+        </a-form-item>
+
+        <div v-if="selectedDocFile" class="selected-file-preview">
+          <FilePdfOutlined style="color: #dc2626" />
+          <span>
+            <strong>{{ selectedDocFile.name }}</strong> ({{
+              formatFileSize(selectedDocFile.size)
+            }})
+          </span>
+        </div>
+      </a-form>
+    </a-modal>
 
     <!-- Modal Edit Proker -->
     <a-modal
@@ -740,6 +1196,55 @@ onMounted(() => {
   color: #52616b;
 }
 
+.tab-action-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background-color: #f9f7f7;
+  border: 1px solid #dbe2ef;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.progress-overview-box {
+  flex: 1;
+  min-width: 240px;
+}
+
+.progress-overview-label {
+  font-size: 13.5px;
+  color: #112d4e;
+  margin-bottom: 6px;
+}
+
+.doc-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-input-control {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed #3f72af;
+  border-radius: 6px;
+  background-color: #f9f7f7;
+}
+
+.selected-file-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9f7f7;
+  border: 1px solid #dbe2ef;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
 .budgets-list {
   display: flex;
   flex-direction: column;
@@ -782,6 +1287,11 @@ onMounted(() => {
 .fw-semibold {
   font-weight: 600;
   color: #112d4e;
+}
+
+.text-muted {
+  font-size: 12.5px;
+  color: #8c98a4;
 }
 
 :deep(.ant-table-thead > tr > th) {

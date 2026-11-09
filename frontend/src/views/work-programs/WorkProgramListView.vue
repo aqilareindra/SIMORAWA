@@ -11,6 +11,9 @@ import {
   EditOutlined,
   DeleteOutlined,
   MinusCircleOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  FilePdfOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -21,6 +24,7 @@ import {
   WORK_PROGRAM_STATUS_COLORS,
   WORK_PROGRAM_STATUS_LABELS,
   type BudgetStatus,
+  type DocumentItem,
   type WorkProgram,
   type WorkProgramStatus,
 } from '@/types/work-program';
@@ -32,6 +36,14 @@ const workPrograms = ref<WorkProgram[]>([]);
 const picCandidates = ref<User[]>([]);
 const loading = ref(false);
 const updatingStatusId = ref<string | null>(null);
+
+// Master Template KAK state (FR-08 & FR-21)
+const templateKak = ref<DocumentItem | null>(null);
+const loadingTemplateKak = ref(false);
+const downloadingTemplateKak = ref(false);
+const templateModalVisible = ref(false);
+const uploadingTemplateKak = ref(false);
+const selectedTemplateFile = ref<File | null>(null);
 
 const filters = reactive<{
   search: string;
@@ -47,6 +59,10 @@ const canManageWorkProgram = computed(() =>
 
 const canUpdateStatus = computed(() =>
   ['KADIV', 'PIC', 'ADMIN'].includes(authStore.userRole || ''),
+);
+
+const canManageTemplateKak = computed(() =>
+  ['SEKRETARIS', 'ADMIN'].includes(authStore.userRole || ''),
 );
 
 const statusOptions = (
@@ -170,6 +186,116 @@ async function fetchPicCandidates() {
     picCandidates.value = data;
   } catch {
     // Abaikan jika gagal memuat kandidat PIC
+  }
+}
+
+async function fetchTemplateKak() {
+  loadingTemplateKak.value = true;
+  try {
+    const { data } = await api.get<DocumentItem | null>(
+      '/documents/template-kak',
+    );
+    templateKak.value = data || null;
+  } catch {
+    templateKak.value = null;
+  } finally {
+    loadingTemplateKak.value = false;
+  }
+}
+
+async function handleDownloadTemplateKak() {
+  if (!templateKak.value) {
+    message.warning('Master Template KAK belum tersedia.');
+    return;
+  }
+
+  downloadingTemplateKak.value = true;
+  try {
+    const response = await api.get(
+      `/documents/${templateKak.value.id}/download`,
+      {
+        responseType: 'blob',
+      },
+    );
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      templateKak.value.fileName || 'Template-KAK-SIMORAWA.pdf',
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    message.error('Gagal mengunduh file Template KAK.');
+  } finally {
+    downloadingTemplateKak.value = false;
+  }
+}
+
+function openTemplateUploadModal() {
+  selectedTemplateFile.value = null;
+  templateModalVisible.value = true;
+}
+
+function onTemplateFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  if (!file) {
+    selectedTemplateFile.value = null;
+    return;
+  }
+
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    message.error('Hanya file berformat PDF (.pdf) yang diperbolehkan.');
+    input.value = '';
+    selectedTemplateFile.value = null;
+    return;
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    message.error('Ukuran file maksimal adalah 10 MB.');
+    input.value = '';
+    selectedTemplateFile.value = null;
+    return;
+  }
+
+  selectedTemplateFile.value = file;
+}
+
+async function handleUploadTemplateKak() {
+  if (!selectedTemplateFile.value) {
+    message.warning('Silakan pilih file PDF Template KAK terlebih dahulu.');
+    return;
+  }
+
+  uploadingTemplateKak.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedTemplateFile.value);
+
+    const { data } = await api.post<DocumentItem>(
+      '/documents/template-kak',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      },
+    );
+
+    templateKak.value = data;
+    templateModalVisible.value = false;
+    message.success('Master Template KAK berhasil diperbarui.');
+  } catch (err: any) {
+    const msg =
+      err?.response?.data?.message || 'Gagal mengunggah Master Template KAK.';
+    message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+  } finally {
+    uploadingTemplateKak.value = false;
   }
 }
 
@@ -326,6 +452,13 @@ function formatDate(dateStr?: string) {
   });
 }
 
+function formatFileSize(bytes?: number) {
+  if (!bytes) return '0 KB';
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
+}
+
 function getRowClassName(_record: WorkProgram, index: number) {
   return index % 2 === 1 ? 'striped-row' : '';
 }
@@ -333,6 +466,7 @@ function getRowClassName(_record: WorkProgram, index: number) {
 onMounted(() => {
   fetchWorkPrograms();
   fetchPicCandidates();
+  fetchTemplateKak();
 });
 </script>
 
@@ -359,6 +493,56 @@ onMounted(() => {
         Tambah Program Kerja
       </a-button>
     </div>
+
+    <!-- Banner Master Template KAK (FR-08 & FR-21) -->
+    <a-card class="template-kak-card" :bordered="true">
+      <div class="template-kak-row">
+        <div class="template-kak-info">
+          <FilePdfOutlined class="template-kak-icon" />
+          <div>
+            <div class="template-kak-title">
+              Dokumen Master Template KAK Standar HIMA IF UISI
+            </div>
+            <div v-if="templateKak" class="template-kak-meta">
+              Berkas aktif: <strong>{{ templateKak.fileName }}</strong> ({{
+                formatFileSize(templateKak.fileSize)
+              }}) &bull; Diperbarui pada {{ formatDate(templateKak.createdAt) }}
+              <template v-if="templateKak.uploader">
+                oleh <strong>{{ templateKak.uploader.name }}</strong>
+              </template>
+            </div>
+            <div v-else class="template-kak-meta">
+              Belum ada Master Template KAK standar yang diunggah oleh
+              Sekretaris.
+            </div>
+          </div>
+        </div>
+
+        <a-space wrap>
+          <a-button
+            type="primary"
+            :disabled="!templateKak"
+            :loading="downloadingTemplateKak"
+            :icon="h(DownloadOutlined)"
+            @click="handleDownloadTemplateKak"
+          >
+            Unduh Template KAK Standar
+          </a-button>
+
+          <a-button
+            v-if="canManageTemplateKak"
+            :icon="h(UploadOutlined)"
+            @click="openTemplateUploadModal"
+          >
+            {{
+              templateKak
+                ? 'Perbarui Master Template KAK (PDF)'
+                : 'Upload Master Template KAK (PDF)'
+            }}
+          </a-button>
+        </a-space>
+      </div>
+    </a-card>
 
     <!-- Toolbar Filter & Pencarian -->
     <a-card class="filter-card" :bordered="true">
@@ -505,6 +689,47 @@ onMounted(() => {
         </template>
       </a-table>
     </a-card>
+
+    <!-- Modal Upload Master Template KAK (SEKRETARIS / ADMIN) -->
+    <a-modal
+      v-model:open="templateModalVisible"
+      title="Unggah Master Template KAK Standar (PDF)"
+      :confirm-loading="uploadingTemplateKak"
+      ok-text="Unggah Template"
+      cancel-text="Batal"
+      destroy-on-close
+      @ok="handleUploadTemplateKak"
+    >
+      <div class="upload-modal-body">
+        <a-alert
+          message="Ketentuan Berkas Template KAK"
+          description="File harus berformat PDF (.pdf) dengan ukuran maksimal 10 MB. File ini akan menjadi acuan standar yang dapat diunduh oleh seluruh PIC dan Kepala Divisi."
+          type="info"
+          show-icon
+          style="margin-bottom: 16px"
+        />
+
+        <a-form layout="vertical">
+          <a-form-item label="Pilih File PDF Template KAK" required>
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              class="file-input-control"
+              @change="onTemplateFileChange"
+            />
+          </a-form-item>
+        </a-form>
+
+        <div v-if="selectedTemplateFile" class="selected-file-preview">
+          <FilePdfOutlined style="color: #dc2626" />
+          <span>
+            <strong>{{ selectedTemplateFile.name }}</strong> ({{
+              formatFileSize(selectedTemplateFile.size)
+            }})
+          </span>
+        </div>
+      </div>
+    </a-modal>
 
     <!-- Modal Buat / Edit Program Kerja -->
     <a-modal
@@ -684,10 +909,43 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.template-kak-card,
 .filter-card,
 .table-card {
   border-color: #dbe2ef;
   border-radius: 10px;
+}
+
+.template-kak-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.template-kak-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.template-kak-icon {
+  font-size: 26px;
+  color: #3f72af;
+  margin-top: 2px;
+}
+
+.template-kak-title {
+  font-weight: 700;
+  color: #112d4e;
+  font-size: 14.5px;
+}
+
+.template-kak-meta {
+  font-size: 12.5px;
+  color: #52616b;
+  margin-top: 2px;
 }
 
 .filter-toolbar {
@@ -745,6 +1003,29 @@ onMounted(() => {
 .text-muted {
   font-size: 12.5px;
   color: #8c98a4;
+}
+
+.upload-modal-body {
+  margin-top: 12px;
+}
+
+.file-input-control {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed #3f72af;
+  border-radius: 6px;
+  background-color: #f9f7f7;
+}
+
+.selected-file-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9f7f7;
+  border: 1px solid #dbe2ef;
+  border-radius: 6px;
+  font-size: 13px;
 }
 
 .proker-modal-form {

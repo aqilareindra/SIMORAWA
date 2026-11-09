@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkProgramsModule } from './work-programs/work-programs.module';
+import { DocumentsModule } from './documents/documents.module';
+import { ProgressReportsModule } from './progress-reports/progress-reports.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { WorkProgramsModule } from './work-programs/work-programs.module';
     AuthModule,
     UsersModule,
     WorkProgramsModule,
+    DocumentsModule,
+    ProgressReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

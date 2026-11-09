@@ -20,10 +20,10 @@
   - Pastikan hapus proker berjalan mulus dengan `ON DELETE CASCADE` (UAT-19 Fix).
 
 ## Fase 2: Dokumen, Progres & Evaluasi KPI/KPA
-- [ ] **2.1 Manajemen Dokumen & Template KAK (FR-08, FR-21):**
+- [x] **2.1 Manajemen Dokumen & Template KAK (FR-08, FR-21):**
   - Upload & download Master Template KAK oleh `SEKRETARIS` (`workProgramId = null`).
   - Upload dokumen pendukung PDF (KAK, LPJ, Surat) pada detail proker oleh `PIC` & `SEKRETARIS` (Multer max 10MB, simpan kategori di `type` dan MIME di `mimeType` - UAT-22 Fix).
-- [ ] **2.2 Laporan Progres PIC (FR-22):**
+- [x] **2.2 Laporan Progres PIC (FR-22):**
   - Form tambah progres (0-100%, deskripsi, kendala) oleh `PIC` di halaman Detail Proker.
 - [ ] **2.3 Evaluasi KPI/KPA & Dashboard Evaluasi (FR-09, FR-10, FR-11, FR-12):**
   - Form Evaluasi dinamis (tambah/hapus baris indikator, skor bintang 1-5, simpan sebagai `DRAFT` atau `SUBMITTED`) oleh `KADIV`.
