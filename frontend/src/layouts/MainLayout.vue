@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, h } from 'vue';
+import { computed, ref, h, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import {
@@ -13,16 +13,115 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   UserOutlined,
+  CheckOutlined,
 } from '@ant-design/icons-vue';
+import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 import { ROLE_COLORS, ROLE_LABELS, type Role } from '@/types/auth';
+import { formatDate } from '@/utils/format';
+
+interface NotificationRecord {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
 const collapsed = ref(false);
+const notifPopoverOpen = ref(false);
+const loadingNotifications = ref(false);
+const markingAllRead = ref(false);
 const unreadNotificationsCount = ref(0);
+const notifications = ref<NotificationRecord[]>([]);
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+async function fetchNotifications() {
+  if (!authStore.isAuthenticated) return;
+  try {
+    const { data } = await api.get<{
+      unreadCount: number;
+      notifications: NotificationRecord[];
+    }>('/notifications');
+    unreadNotificationsCount.value = data.unreadCount;
+    notifications.value = data.notifications || [];
+  } catch {
+    // Abaikan jika gagal memuat notifikasi di background
+  }
+}
+
+async function handleNotificationClick(item: NotificationRecord) {
+  if (!item.isRead) {
+    try {
+      const { data } = await api.patch<{
+        unreadCount: number;
+      }>(`/notifications/${item.id}/read`);
+      item.isRead = true;
+      unreadNotificationsCount.value = data.unreadCount;
+    } catch {
+      item.isRead = true;
+      unreadNotificationsCount.value = Math.max(
+        0,
+        unreadNotificationsCount.value - 1,
+      );
+    }
+  }
+
+  notifPopoverOpen.value = false;
+  if (item.link) {
+    router.push(item.link);
+  }
+}
+
+async function handleMarkAllRead() {
+  if (unreadNotificationsCount.value === 0) return;
+  markingAllRead.value = true;
+  try {
+    await api.patch('/notifications/read-all');
+    notifications.value = notifications.value.map((n) => ({
+      ...n,
+      isRead: true,
+    }));
+    unreadNotificationsCount.value = 0;
+    message.success('Seluruh notifikasi telah ditandai sudah dibaca.');
+  } catch {
+    message.error('Gagal menandai seluruh notifikasi.');
+  } finally {
+    markingAllRead.value = false;
+  }
+}
+
+watch(notifPopoverOpen, (open) => {
+  if (open) {
+    loadingNotifications.value = true;
+    fetchNotifications().finally(() => {
+      loadingNotifications.value = false;
+    });
+  }
+});
+
+watch(
+  () => route.fullPath,
+  () => {
+    fetchNotifications();
+  },
+);
+
+onMounted(() => {
+  fetchNotifications();
+  pollInterval = setInterval(fetchNotifications, 30000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
 
 interface NavMenuItem {
   key: string;
@@ -180,16 +279,56 @@ function handleLogout() {
         </div>
 
         <div class="topbar-right">
-          <!-- Ikon Lonceng Notifikasi + Unread Badge Placeholder -->
+          <!-- Ikon Lonceng Notifikasi + Unread Badge Real-time -->
           <a-popover
+            v-model:open="notifPopoverOpen"
             placement="bottomRight"
             trigger="click"
-            title="Notifikasi Pengingat"
+            overlay-class-name="simorawa-notif-popover"
           >
-            <template #content>
-              <div class="notif-placeholder">
-                Belum ada notifikasi pengingat terbaru.
+            <template #title>
+              <div class="notif-popover-header">
+                <span class="notif-popover-title">
+                  Notifikasi ({{ unreadNotificationsCount }} belum dibaca)
+                </span>
+                <a-button
+                  v-if="unreadNotificationsCount > 0"
+                  type="link"
+                  size="small"
+                  :loading="markingAllRead"
+                  :icon="h(CheckOutlined)"
+                  @click="handleMarkAllRead"
+                >
+                  Tandai Semua Dibaca
+                </a-button>
               </div>
+            </template>
+            <template #content>
+              <a-spin :spinning="loadingNotifications">
+                <div v-if="notifications.length > 0" class="notif-list">
+                  <div
+                    v-for="item in notifications"
+                    :key="item.id"
+                    class="notif-item"
+                    :class="{ 'notif-item-unread': !item.isRead }"
+                    @click="handleNotificationClick(item)"
+                  >
+                    <div class="notif-item-top">
+                      <span class="notif-item-title">
+                        <span v-if="!item.isRead" class="notif-unread-dot" />
+                        {{ item.title }}
+                      </span>
+                      <span class="notif-item-date">
+                        {{ formatDate(item.createdAt) }}
+                      </span>
+                    </div>
+                    <div class="notif-item-msg">{{ item.message }}</div>
+                  </div>
+                </div>
+                <div v-else class="notif-placeholder">
+                  Belum ada notifikasi terbaru.
+                </div>
+              </a-spin>
             </template>
             <a-badge :count="unreadNotificationsCount" :offset="[-2, 2]">
               <a-button
@@ -390,7 +529,87 @@ function handleLogout() {
 .notif-placeholder {
   font-size: 13px;
   color: #52616b;
-  padding: 6px 2px;
+  padding: 16px 8px;
+  text-align: center;
+  width: 340px;
+}
+
+.notif-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 350px;
+}
+
+.notif-popover-title {
+  font-weight: 700;
+  color: #112d4e;
+  font-size: 13.5px;
+}
+
+.notif-list {
+  width: 350px;
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notif-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #dbe2ef;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.notif-item:hover {
+  background-color: #f1f5f9;
+}
+
+.notif-item-unread {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.notif-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.notif-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #112d4e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notif-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #3f72af;
+  flex-shrink: 0;
+}
+
+.notif-item-date {
+  font-size: 11px;
+  color: #8c98a4;
+  white-space: nowrap;
+}
+
+.notif-item-msg {
+  font-size: 12.5px;
+  color: #52616b;
+  line-height: 1.45;
 }
 
 .topbar-divider {

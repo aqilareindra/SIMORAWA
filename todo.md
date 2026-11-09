@@ -35,9 +35,9 @@
   - Tombol Approve/Reject untuk `BPH`/`ADMIN`.
   - **Transaksi Otomatis:** Saat `APPROVED`, otomatis kurangi `kas.balance` dan catat di `kas_transactions` (`PENGELUARAN`).
   - Halaman Manajemen Kas untuk `BENDAHARA` (input mutasi manual `PEMASUKAN` / `PENGELUARAN` di luar anggaran proker).
-- [ ] **3.2 Dashboard Monitoring Utama (FR-16):**
+- [x] **3.2 Dashboard Monitoring Utama (FR-16):**
   - Statistik Proker (Total, Aktif, Selesai, Ditunda) & Statistik Anggaran (Total Pengajuan, Total Nilai Rupiah, Approved, Draft).
-- [ ] **3.3 Cron Job Notifikasi H-30 & SMTP Email (FR-13, FR-14, FR-15):**
+- [x] **3.3 Cron Job Notifikasi H-30 & SMTP Email (FR-13, FR-14, FR-15):**
   - Scheduler harian mengecek proker dengan deadline H-30, H-14, dan H-7.
   - Buat notifikasi in-app (muncul di ikon lonceng Topbar + fitur mark as read) & kirim email via `nodemailer` + tambahkan endpoint manual trigger `/api/notifications/trigger-check` untuk keperluan demo UAT.
 - [ ] **3.4 Generate LPJ Otomatis & Export PDF/Excel (FR-20, FR-23):**

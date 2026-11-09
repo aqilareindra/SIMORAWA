@@ -12,6 +12,8 @@ import { ProgressReportsModule } from './progress-reports/progress-reports.modul
 import { EvaluationsModule } from './evaluations/evaluations.module';
 import { BudgetsModule } from './budgets/budgets.module';
 import { KasModule } from './kas/kas.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { KasModule } from './kas/kas.module';
     EvaluationsModule,
     BudgetsModule,
     KasModule,
+    NotificationsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

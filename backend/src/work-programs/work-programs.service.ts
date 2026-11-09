@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { BudgetStatus, Prisma, WorkProgramStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateWorkProgramDto } from './dto/create-work-program.dto';
 import { UpdateWorkProgramDto } from './dto/update-work-program.dto';
 import { UpdateWorkProgramStatusDto } from './dto/update-work-program-status.dto';
@@ -20,7 +21,10 @@ const USER_PUBLIC_SELECT = {
 
 @Injectable()
 export class WorkProgramsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findAll(query: QueryWorkProgramsDto) {
     const where: Prisma.WorkProgramWhereInput = {};
@@ -148,7 +152,7 @@ export class WorkProgramsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const createdProgram = await tx.workProgram.create({
         data: {
           name: dto.name.trim(),
@@ -223,6 +227,18 @@ export class WorkProgramsService {
         },
       });
     });
+
+    if (result) {
+      await this.notificationsService.createNotification({
+        userId: result.picId,
+        type: 'WORK_PROGRAM_ASSIGNED',
+        title: `Penugasan PIC Proker Baru: ${result.name}`,
+        message: `Anda telah ditugaskan sebagai Penanggung Jawab (PIC) untuk program kerja "${result.name}".`,
+        link: `/work-programs/${result.id}`,
+      });
+    }
+
+    return result;
   }
 
   async update(id: string, dto: UpdateWorkProgramDto) {
@@ -268,7 +284,7 @@ export class WorkProgramsService {
       updateData.status = dto.status;
     }
 
-    return this.prisma.workProgram.update({
+    const updated = await this.prisma.workProgram.update({
       where: { id },
       data: updateData,
       include: {
@@ -293,6 +309,18 @@ export class WorkProgramsService {
         },
       },
     });
+
+    if (dto.picId && dto.picId !== existing.picId) {
+      await this.notificationsService.createNotification({
+        userId: updated.picId,
+        type: 'WORK_PROGRAM_ASSIGNED',
+        title: `Penugasan PIC Proker: ${updated.name}`,
+        message: `Anda telah ditugaskan sebagai Penanggung Jawab (PIC) baru untuk program kerja "${updated.name}".`,
+        link: `/work-programs/${updated.id}`,
+      });
+    }
+
+    return updated;
   }
 
   async updateStatus(id: string, dto: UpdateWorkProgramStatusDto) {

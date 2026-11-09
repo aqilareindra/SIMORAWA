@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { EvaluationStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
 import { UpdateEvaluationDto } from './dto/update-evaluation.dto';
 import { QueryEvaluationsDto } from './dto/query-evaluations.dto';
@@ -32,7 +33,10 @@ const EVALUATION_INCLUDE = {
 
 @Injectable()
 export class EvaluationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private withAverageScore<
     T extends { indicators: Array<{ score: number }> },
@@ -188,7 +192,19 @@ export class EvaluationsService {
       });
     });
 
-    return this.withAverageScore(created);
+    const result = this.withAverageScore(created);
+
+    if (status === EvaluationStatus.SUBMITTED && created.workProgram) {
+      await this.notificationsService.createNotification({
+        userId: created.workProgram.picId,
+        type: 'EVALUATION_SUBMITTED',
+        title: `Hasil Evaluasi KPI/KPA: ${created.workProgram.name}`,
+        message: `Evaluasi KPI/KPA untuk program kerja "${created.workProgram.name}" telah disubmit dengan rata-rata skor ${result.avgScore} / 5.`,
+        link: `/work-programs/${created.workProgramId}?tab=evaluations`,
+      });
+    }
+
+    return result;
   }
 
   async update(id: string, dto: UpdateEvaluationDto) {
@@ -251,7 +267,23 @@ export class EvaluationsService {
       });
     });
 
-    return this.withAverageScore(updated);
+    const result = this.withAverageScore(updated);
+
+    if (
+      nextStatus === EvaluationStatus.SUBMITTED &&
+      existing.status !== EvaluationStatus.SUBMITTED &&
+      updated.workProgram
+    ) {
+      await this.notificationsService.createNotification({
+        userId: updated.workProgram.picId,
+        type: 'EVALUATION_SUBMITTED',
+        title: `Hasil Evaluasi KPI/KPA: ${updated.workProgram.name}`,
+        message: `Evaluasi KPI/KPA untuk program kerja "${updated.workProgram.name}" telah disubmit dengan rata-rata skor ${result.avgScore} / 5.`,
+        link: `/work-programs/${updated.workProgramId}?tab=evaluations`,
+      });
+    }
+
+    return result;
   }
 
   async remove(id: string) {

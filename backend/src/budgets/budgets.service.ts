@@ -12,6 +12,7 @@ import {
   Role,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BudgetItemInputDto, CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { ReviewBudgetDto } from './dto/review-budget.dto';
@@ -64,7 +65,10 @@ const EDITABLE_STATUSES: BudgetStatus[] = [
 
 @Injectable()
 export class BudgetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ============================ Helpers ============================
 
@@ -190,7 +194,7 @@ export class BudgetsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       return tx.budget.create({
         data: {
           workProgramId: dto.workProgramId,
@@ -203,6 +207,19 @@ export class BudgetsService {
         include: BUDGET_INCLUDE,
       });
     });
+
+    if (dto.submit) {
+      await this.notificationsService.notifyUsersByRoles({
+        roles: [Role.BENDAHARA, Role.BPH],
+        type: 'BUDGET_SUBMITTED',
+        title: `Pengajuan Anggaran Baru: ${workProgram.name}`,
+        message: `${user.name} mengajukan anggaran proker "${workProgram.name}" senilai Rp ${Number(totalAmount).toLocaleString('id-ID')} dan menunggu persetujuan.`,
+        link: '/finance',
+        excludeUserId: user.id,
+      });
+    }
+
+    return created;
   }
 
   async update(id: string, dto: UpdateBudgetDto, user: AuthUser) {
@@ -232,7 +249,7 @@ export class BudgetsService {
     // Anggaran REJECTED yang direvisi kembali menjadi DRAFT (atau langsung diajukan ulang)
     const nextStatus = dto.submit ? BudgetStatus.SUBMITTED : BudgetStatus.DRAFT;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (itemsPayload) {
         await tx.budgetItem.deleteMany({ where: { budgetId: id } });
       }
@@ -253,6 +270,19 @@ export class BudgetsService {
         include: BUDGET_INCLUDE,
       });
     });
+
+    if (dto.submit) {
+      await this.notificationsService.notifyUsersByRoles({
+        roles: [Role.BENDAHARA, Role.BPH],
+        type: 'BUDGET_SUBMITTED',
+        title: `Pengajuan Anggaran: ${existing.workProgram.name}`,
+        message: `${user.name} mengajukan anggaran proker "${existing.workProgram.name}" senilai Rp ${Number(nextTotal).toLocaleString('id-ID')} untuk direview.`,
+        link: '/finance',
+        excludeUserId: user.id,
+      });
+    }
+
+    return updated;
   }
 
   /** Ajukan anggaran: DRAFT / REJECTED → SUBMITTED (Menunggu Approval) */
@@ -272,11 +302,22 @@ export class BudgetsService {
       );
     }
 
-    return this.prisma.budget.update({
+    const submitted = await this.prisma.budget.update({
       where: { id },
       data: { status: BudgetStatus.SUBMITTED },
       include: BUDGET_INCLUDE,
     });
+
+    await this.notificationsService.notifyUsersByRoles({
+      roles: [Role.BENDAHARA, Role.BPH],
+      type: 'BUDGET_SUBMITTED',
+      title: `Pengajuan Anggaran: ${existing.workProgram.name}`,
+      message: `${user.name} mengajukan anggaran proker "${existing.workProgram.name}" senilai Rp ${Number(existing.totalAmount).toLocaleString('id-ID')} dan menunggu persetujuan.`,
+      link: '/finance',
+      excludeUserId: user.id,
+    });
+
+    return submitted;
   }
 
   /**
@@ -291,7 +332,7 @@ export class BudgetsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const reviewed = await this.prisma.$transaction(async (tx) => {
       const budget = await tx.budget.findUnique({
         where: { id },
         include: { workProgram: true },
@@ -389,6 +430,31 @@ export class BudgetsService {
         include: BUDGET_INCLUDE,
       });
     });
+
+    if (reviewed && reviewed.workProgram) {
+      const isApproved = dto.status === BudgetStatus.APPROVED;
+      const recipientIds = Array.from(
+        new Set([reviewed.workProgram.picId, reviewed.submittedBy]),
+      );
+
+      await Promise.all(
+        recipientIds.map((uid) =>
+          this.notificationsService.createNotification({
+            userId: uid,
+            type: isApproved ? 'BUDGET_APPROVED' : 'BUDGET_REJECTED',
+            title: isApproved
+              ? `Anggaran Disetujui: ${reviewed.workProgram.name}`
+              : `Anggaran Ditolak: ${reviewed.workProgram.name}`,
+            message: isApproved
+              ? `Pengajuan anggaran proker "${reviewed.workProgram.name}" senilai Rp ${Number(reviewed.totalAmount).toLocaleString('id-ID')} telah DISETUJUI oleh ${reviewer.name} (${reviewer.role}). Dana telah dicairkan dari Kas HIMA.`
+              : `Pengajuan anggaran proker "${reviewed.workProgram.name}" DITOLAK oleh ${reviewer.name} (${reviewer.role}). Catatan: ${dto.notes?.trim() || '-'}`,
+            link: `/work-programs/${reviewed.workProgramId}?tab=budgets`,
+          }),
+        ),
+      );
+    }
+
+    return reviewed;
   }
 
   async remove(id: string, user: AuthUser) {
