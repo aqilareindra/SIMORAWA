@@ -14,6 +14,7 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { KasModule } from './kas/kas.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ExportsModule } from './exports/exports.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     KasModule,
     NotificationsModule,
     DashboardModule,
+    ExportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

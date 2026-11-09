@@ -15,6 +15,7 @@ import {
   SaveOutlined,
   SendOutlined,
   MinusCircleOutlined,
+  FilePdfOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -50,6 +51,34 @@ const canManageEvaluation = computed(() =>
 const canDeleteEvaluation = computed(() =>
   ['KADIV', 'ADMIN'].includes(authStore.userRole || ''),
 );
+const exportingPdf = ref(false);
+
+async function handleExportEvaluationsPdf() {
+  exportingPdf.value = true;
+  try {
+    const response = await api.get('/evaluations/export/pdf', {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `Laporan-Evaluasi-KPI-KPA-HIMA-${dateStamp}.pdf`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    message.success('Laporan PDF Evaluasi KPI/KPA berhasil diunduh.');
+  } catch (err: any) {
+    showError(err, 'Gagal mengunduh laporan PDF evaluasi.');
+  } finally {
+    exportingPdf.value = false;
+  }
+}
 
 // ===================== Data Dashboard & Tabel =====================
 const evaluations = ref<EvaluationItem[]>([]);
@@ -434,6 +463,14 @@ onMounted(() => {
       <a-space wrap>
         <a-button :icon="h(ReloadOutlined)" @click="refreshAll">
           Muat Ulang
+        </a-button>
+        <a-button
+          :icon="h(FilePdfOutlined)"
+          :loading="exportingPdf"
+          class="btn-export-pdf"
+          @click="handleExportEvaluationsPdf"
+        >
+          Cetak / Export Laporan Evaluasi (PDF)
         </a-button>
         <a-button
           v-if="canManageEvaluation"
@@ -1044,6 +1081,12 @@ onMounted(() => {
 .proker-link {
   font-weight: 600;
   color: #3f72af;
+}
+
+.btn-export-pdf {
+  color: #b91c1c;
+  border-color: #b91c1c;
+  font-weight: 600;
 }
 
 .score-cell {

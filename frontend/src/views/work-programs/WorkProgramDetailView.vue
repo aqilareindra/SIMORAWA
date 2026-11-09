@@ -18,7 +18,10 @@ import {
   StarOutlined,
   BarChartOutlined,
   SendOutlined,
+  FileDoneOutlined,
 } from '@ant-design/icons-vue';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 import { ROLE_LABELS, type User } from '@/types/auth';
@@ -48,7 +51,7 @@ const picCandidates = ref<User[]>([]);
 const templateKak = ref<DocumentItem | null>(null);
 const loading = ref(false);
 const updatingStatus = ref(false);
-const VALID_TABS = ['budgets', 'progress', 'documents', 'evaluations'];
+const VALID_TABS = ['budgets', 'progress', 'documents', 'evaluations', 'lpj'];
 const activeTab = ref(
   VALID_TABS.includes(route.query.tab as string)
     ? (route.query.tab as string)
@@ -648,6 +651,158 @@ function formatFileSize(bytes?: number) {
   const kb = bytes / 1024;
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(2)} MB`;
+}
+
+// Generate LPJ Otomatis ke PDF menggunakan jspdf + jspdf-autotable (Mitigasi Eks UAT-39)
+function handleExportLpjPdf() {
+  if (!workProgram.value) return;
+  const wp = workProgram.value;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Kop Resmi HIMA IF UISI
+  doc.setFillColor(17, 45, 78); // #112D4E
+  doc.rect(14, 12, 182, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('LAPORAN PERTANGGUNGJAWABAN (LPJ) PROGRAM KERJA', 20, 21);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(
+    'SIMORAWA - Himpunan Mahasiswa Informatika (HIMA IF) UISI',
+    20,
+    28,
+  );
+
+  // 1. Identitas Program Kerja
+  doc.setTextColor(17, 45, 78);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('1. Identitas & Ringkasan Program Kerja', 14, 43);
+
+  autoTable(doc, {
+    startY: 46,
+    theme: 'grid',
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    columnStyles: {
+      0: { fontStyle: 'bold', fillColor: [249, 247, 247], cellWidth: 52 },
+    },
+    body: [
+      ['Nama Program Kerja', wp.name],
+      ['PIC Pelaksana', `${wp.pic?.name || '-'} (${wp.pic?.email || '-'})`],
+      ['Tenggat Waktu (Deadline)', formatDate(wp.deadline)],
+      ['Status Pelaksanaan', WORK_PROGRAM_STATUS_LABELS[wp.status]],
+      ['Capaian Progres Terakhir', `${latestProgressPct.value}%`],
+      [
+        'Rata-rata Skor KPI/KPA',
+        `${evaluationOverview.value.average.toFixed(2)} / 5.00`,
+      ],
+      ['Deskripsi Kegiatan', wp.description || '-'],
+    ],
+  });
+
+  // 2. Rincian Anggaran Program Kerja
+  let nextY = (doc as any).lastAutoTable?.finalY + 8 || 105;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('2. Rekapitulasi Rincian Anggaran Kegiatan', 14, nextY);
+
+  const allBudgetItems = (wp.budgets || []).flatMap((b) =>
+    (b.items || []).map((it) => [
+      it.itemName,
+      `${it.quantity} ${it.unit}`,
+      formatCurrency(it.unitPrice),
+      formatCurrency(it.totalPrice),
+      BUDGET_STATUS_LABELS[b.status],
+    ]),
+  );
+
+  autoTable(doc, {
+    startY: nextY + 3,
+    head: [
+      [
+        'Nama Item Anggaran',
+        'Kuantitas',
+        'Harga Satuan',
+        'Total Harga',
+        'Status Anggaran',
+      ],
+    ],
+    body:
+      allBudgetItems.length > 0
+        ? allBudgetItems
+        : [['Belum ada rincian item anggaran', '-', '-', '-', '-']],
+    headStyles: { fillColor: [17, 45, 78], textColor: [255, 255, 255] },
+    styles: { fontSize: 8.5 },
+  });
+
+  // 3. Riwayat Laporan Progres & Kendala
+  nextY = (doc as any).lastAutoTable?.finalY + 8 || 155;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('3. Riwayat Laporan Progres & Kendala Lapangan', 14, nextY);
+
+  const progressRows = (wp.progressReports || []).map((pr) => [
+    formatDate(pr.submittedAt),
+    `${pr.progressPct}%`,
+    pr.description,
+    pr.obstacles || 'Tidak ada kendala',
+    pr.submitter?.name || '-',
+  ]);
+
+  autoTable(doc, {
+    startY: nextY + 3,
+    head: [
+      [
+        'Tanggal',
+        'Capaian',
+        'Deskripsi Progres',
+        'Kendala di Lapangan',
+        'Pelapor',
+      ],
+    ],
+    body:
+      progressRows.length > 0
+        ? progressRows
+        : [['Belum ada laporan progres', '-', '-', '-', '-']],
+    headStyles: { fillColor: [17, 45, 78], textColor: [255, 255, 255] },
+    styles: { fontSize: 8.5 },
+  });
+
+  // 4. Evaluasi KPI/KPA
+  nextY = (doc as any).lastAutoTable?.finalY + 8 || 200;
+  if (nextY > 250) {
+    doc.addPage();
+    nextY = 20;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('4. Hasil Evaluasi Indikator Kinerja (KPI/KPA)', 14, nextY);
+
+  const evalRows = (wp.evaluations || []).flatMap((ev) =>
+    (ev.indicators || []).map((ind) => [
+      ind.indicatorName,
+      ind.target,
+      ind.realisasi,
+      `${ind.score} / 5`,
+      ind.notes || '-',
+    ]),
+  );
+
+  autoTable(doc, {
+    startY: nextY + 3,
+    head: [['Indikator KPI/KPA', 'Target', 'Realisasi', 'Skor', 'Catatan']],
+    body:
+      evalRows.length > 0
+        ? evalRows
+        : [['Belum ada evaluasi KPI/KPA', '-', '-', '-', '-']],
+    headStyles: { fillColor: [17, 45, 78], textColor: [255, 255, 255] },
+    styles: { fontSize: 8.5 },
+  });
+
+  const safeName = wp.name.replace(/[^a-zA-Z0-9-_]/g, '-');
+  doc.save(`LPJ-${safeName}.pdf`);
+  message.success('Dokumen PDF LPJ Otomatis berhasil digenerate dan diunduh.');
 }
 
 onMounted(() => {
@@ -1272,6 +1427,69 @@ onMounted(() => {
                 v-else
                 description="Belum ada evaluasi KPI/KPA untuk program kerja ini."
               />
+            </a-tab-pane>
+
+            <!-- Tab 5: Ringkasan LPJ Otomatis & Export PDF (FR-20, FR-23, Mitigasi UAT-39) -->
+            <a-tab-pane key="lpj">
+              <template #tab>
+                <span>
+                  <FileDoneOutlined />
+                  Ringkasan LPJ Otomatis
+                </span>
+              </template>
+
+              <div class="tab-action-banner">
+                <div>
+                  <div class="fw-semibold">
+                    Ringkasan Laporan Pertanggungjawaban (LPJ) Terintegrasi
+                  </div>
+                  <div class="text-muted">
+                    Rekapitulasi otomatis dari data pelaksanaan proker, rincian
+                    anggaran, laporan progres, dan evaluasi KPI/KPA.
+                  </div>
+                </div>
+
+                <a-button
+                  type="primary"
+                  :icon="h(FilePdfOutlined)"
+                  @click="handleExportLpjPdf"
+                >
+                  Export LPJ ke PDF (Programmatic)
+                </a-button>
+              </div>
+
+              <a-row :gutter="[16, 16]">
+                <a-col :xs="24" :md="8">
+                  <div class="evaluation-note-box">
+                    <div class="text-muted">Capaian Pelaksanaan</div>
+                    <div class="proker-title" style="font-size: 20px">
+                      {{ latestProgressPct }}% ({{
+                        WORK_PROGRAM_STATUS_LABELS[workProgram.status]
+                      }})
+                    </div>
+                  </div>
+                </a-col>
+                <a-col :xs="24" :md="8">
+                  <div class="evaluation-note-box">
+                    <div class="text-muted">Total Anggaran Tercatat</div>
+                    <div class="proker-title" style="font-size: 20px">
+                      {{
+                        workProgram.budgets && workProgram.budgets.length > 0
+                          ? formatCurrency(workProgram.budgets[0].totalAmount)
+                          : 'Rp 0'
+                      }}
+                    </div>
+                  </div>
+                </a-col>
+                <a-col :xs="24" :md="8">
+                  <div class="evaluation-note-box">
+                    <div class="text-muted">Rata-rata Skor KPI/KPA</div>
+                    <div class="proker-title" style="font-size: 20px">
+                      {{ evaluationOverview.average.toFixed(2) }} / 5.00
+                    </div>
+                  </div>
+                </a-col>
+              </a-row>
             </a-tab-pane>
           </a-tabs>
         </a-card>

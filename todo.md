@@ -40,7 +40,7 @@
 - [x] **3.3 Cron Job Notifikasi H-30 & SMTP Email (FR-13, FR-14, FR-15):**
   - Scheduler harian mengecek proker dengan deadline H-30, H-14, dan H-7.
   - Buat notifikasi in-app (muncul di ikon lonceng Topbar + fitur mark as read) & kirim email via `nodemailer` + tambahkan endpoint manual trigger `/api/notifications/trigger-check` untuk keperluan demo UAT.
-- [ ] **3.4 Generate LPJ Otomatis & Export PDF/Excel (FR-20, FR-23):**
+- [x] **3.4 Generate LPJ Otomatis & Export PDF/Excel (FR-20, FR-23):**
   - Tab Ringkasan LPJ Otomatis di halaman Detail Proker.
   - Export LPJ ke PDF menggunakan `jspdf` + `jspdf-autotable` (UAT-39 Fix).
   - Export tabel Proker, Evaluasi, dan Keuangan ke `.xlsx` untuk `SEKRETARIS`, `BENDAHARA`, dan `ADMIN`.

@@ -17,6 +17,7 @@ import {
   CloseCircleOutlined,
   AuditOutlined,
   AccountBookOutlined,
+  FileExcelOutlined,
 } from '@ant-design/icons-vue';
 import api from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -59,6 +60,40 @@ const canViewKas = computed(() =>
     authStore.userRole || '',
   ),
 );
+const canExportFinance = computed(() =>
+  ['BENDAHARA', 'BPH', 'ADMIN', 'SEKRETARIS', 'KADIV'].includes(
+    authStore.userRole || '',
+  ),
+);
+const exportingExcel = ref(false);
+
+async function handleExportFinanceExcel() {
+  exportingExcel.value = true;
+  try {
+    const response = await api.get('/finance/export/excel', {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute('download', `Rekap-Keuangan-Kas-HIMA-${dateStamp}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    message.success('Rekapitulasi Keuangan & Buku Kas (Excel) berhasil diunduh.');
+  } catch (err: any) {
+    message.error(
+      extractErrorMessage(err, 'Gagal mengunduh rekapitulasi keuangan Excel.'),
+    );
+  } finally {
+    exportingExcel.value = false;
+  }
+}
 
 function canEditBudgetRecord(budget: Budget): boolean {
   if (!['DRAFT', 'REJECTED'].includes(budget.status)) return false;
@@ -449,6 +484,15 @@ onMounted(() => {
       <a-space wrap>
         <a-button :icon="h(ReloadOutlined)" @click="refreshAll">
           Muat Ulang
+        </a-button>
+        <a-button
+          v-if="canExportFinance"
+          :icon="h(FileExcelOutlined)"
+          :loading="exportingExcel"
+          class="btn-export-excel"
+          @click="handleExportFinanceExcel"
+        >
+          Export Rekap Keuangan (Excel)
         </a-button>
         <a-button
           v-if="canManageKas"
@@ -1303,6 +1347,12 @@ onMounted(() => {
 .btn-approve {
   background-color: #15803d;
   border-color: #15803d;
+}
+
+.btn-export-excel {
+  color: #15803d;
+  border-color: #15803d;
+  font-weight: 600;
 }
 
 .btn-approve:hover {
